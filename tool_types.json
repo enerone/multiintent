@@ -1,0 +1,17 @@
+{
+    "rag_opensearch": {
+        "description": "Recuperación de información con OpenSearch",
+        "parameters": ["query"],
+        "template": "import httpx\n\nasync def process({{parameters}}):\n    url = 'http://localhost:9200/_search'\n    response = httpx.get(url, params={{parameters}})\n    return response.json()"
+    },
+    "nlp_to_sql": {
+        "description": "Conversión de lenguaje natural a SQL",
+        "parameters": ["query"],
+        "template": "import sqlite3\n\ndef process({{parameters}}):\n    conn = sqlite3.connect('database.db')\n    cursor = conn.cursor()\n    sql_query = f'SELECT * FROM table WHERE column LIKE %{{parameters}}%'\n    cursor.execute(sql_query)\n    results = cursor.fetchall()\n    conn.close()\n    return results"
+    },
+    "generic_empty": {
+        "description": "Intento genérico sin lógica específica",
+        "parameters": ["input_data"],
+        "template": "def process({{parameters}}):\n    return {'message': 'Intento ejecutado', 'input': {{parameters}}}"
+    }
+}

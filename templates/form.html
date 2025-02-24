@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Intents con Ollama</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="max-w-3xl mx-auto p-6 mt-10 bg-white rounded-lg shadow-lg">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Generador de Intents con Ollama</h1>
+
+        <!-- Formulario para crear un Intent -->
+        <form action="/generate/" method="post" class="space-y-4">
+            <div>
+                <label for="intent_name" class="block text-lg font-medium text-gray-700">Nombre del Intent:</label>
+                <input type="text" name="intent_name" id="intent_name" required
+                    class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+            </div>
+
+            <div>
+                <label for="description" class="block text-lg font-medium text-gray-700">Descripción del Intent:</label>
+                <textarea name="description" id="description" rows="4" required
+                    class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+            </div>
+
+            <button type="submit"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg transition">
+                Generar Intent
+            </button>
+        </form>
+
+        <hr class="my-6">
+
+        <!-- Listado de intents generados -->
+        <h2 class="text-2xl font-semibold text-gray-800">Intents Generados</h2>
+        <ul class="mt-3 space-y-2">
+            {% for intent in intents %}
+            <li class="flex items-center justify-between bg-gray-200 p-3 rounded-lg">
+                <button onclick="loadIntent('{{ intent }}')" class="text-left w-full text-gray-800 hover:underline">
+                    {{ intent }}
+                </button>
+                <button onclick="validateIntent('{{ intent }}')" class="ml-2 bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700">
+                    Validar
+                </button>
+                <button onclick="deleteIntent('{{ intent }}')" class="ml-2 bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700">
+                    Eliminar
+                </button>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Modal para mostrar el código -->
+    <div id="intent-modal" class="fixed inset-0 hidden bg-gray-900 bg-opacity-50 flex items-center justify-center">
+        <div class="bg-white p-6 rounded-lg shadow-lg max-w-lg w-full">
+            <h2 class="text-xl font-semibold mb-4">Contenido del Intent</h2>
+            <pre id="intent-content" class="bg-gray-100 p-4 rounded-lg overflow-x-auto max-h-96"></pre>
+            <div class="mt-4 flex justify-end">
+                <button onclick="closeModal()" class="bg-gray-600 text-white px-4 py-2 rounded-lg">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+<!-- Modal para editar el código si hay errores -->
+<div id="edit-modal" class="fixed inset-0 hidden bg-gray-900 bg-opacity-50 flex items-center justify-center">
+    <div class="bg-white p-6 rounded-lg shadow-lg max-w-lg w-full">
+        <h2 class="text-xl font-semibold mb-4">Editar Código</h2>
+        
+        <textarea id="edit-code" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm h-64"></textarea>
+        
+        <!-- Indicador de carga (hidden por defecto) -->
+        <div id="loading-indicator" class="hidden flex justify-center mt-3">
+            <div class="animate-spin rounded-full h-8 w-8 border-t-4 border-blue-600"></div>
+            <span class="ml-2 text-blue-600 font-semibold">Corrigiendo errores...</span>
+        </div>
+
+        <div class="mt-4 flex justify-end">
+            <button id="fix-errors-btn" onclick="fixErrors()" class="bg-yellow-500 text-white px-4 py-2 rounded-lg">
+                Corregir Errores
+            </button>
+            <button onclick="saveEditedCode()" class="bg-green-600 text-white px-4 py-2 rounded-lg ml-2">
+                Guardar
+            </button>
+            <button onclick="closeEditModal()" class="ml-2 bg-gray-600 text-white px-4 py-2 rounded-lg">
+                Cancelar
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function validateIntent(intentName) {
+        if (!intentName.endsWith(".py")) {
+            intentName += ".py";
+        }
+
+        const response = await fetch(`/validate_intent/?intent_name=${intentName}`);
+        const data = await response.json();
+        
+        if (data.status === "success") {
+            alert(data.message);
+        } else {
+            // Mostrar el mensaje de error y el código en la ventana modal
+            document.getElementById("edit-code").value = data.code;
+            document.getElementById("edit-modal").classList.remove("hidden");
+
+            // Guardamos temporalmente el nombre del intent
+            document.getElementById("edit-modal").setAttribute("data-intent", intentName);
+        }
+    }
+
+    function closeEditModal() {
+        document.getElementById("edit-modal").classList.add("hidden");
+    }
+
+    async function saveEditedCode() {
+        const intentName = document.getElementById("edit-modal").getAttribute("data-intent");
+        const editedCode = document.getElementById("edit-code").value;
+
+        const response = await fetch(`/save_edited_code/?intent_name=${intentName}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: editedCode })
+        });
+
+        const data = await response.json();
+        alert(data.message);
+        closeEditModal();
+    }
+
+    async function fixErrors() {
+        const code = document.getElementById("edit-code").value;
+        const fixBtn = document.getElementById("fix-errors-btn");
+        const loadingIndicator = document.getElementById("loading-indicator");
+
+        if (!code.trim()) {
+            alert("⚠️ No hay código para corregir.");
+            return;
+        }
+
+        // Mostrar indicador de carga y deshabilitar el botón
+        fixBtn.disabled = true;
+        fixBtn.classList.add("opacity-50", "cursor-not-allowed");
+        loadingIndicator.classList.remove("hidden");
+
+        const response = await fetch(`/fix_errors/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: code })
+        });
+
+        const data = await response.json();
+
+        // Ocultar indicador de carga y habilitar botón nuevamente
+        fixBtn.disabled = false;
+        fixBtn.classList.remove("opacity-50", "cursor-not-allowed");
+        loadingIndicator.classList.add("hidden");
+
+        if (response.ok) {
+            document.getElementById("edit-code").value = data.fixed_code; // Reemplaza el código con la versión corregida
+            alert(data.message);
+        } else {
+            alert(data.error || "⚠️ No se pudo corregir el código.");
+        }
+    }
+    
+</script>
