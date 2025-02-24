@@ -51,119 +51,162 @@
         </ul>
     </div>
 
-    <!-- Modal para mostrar el código -->
-    <div id="intent-modal" class="fixed inset-0 hidden bg-gray-900 bg-opacity-50 flex items-center justify-center">
+    <!-- Modal para mostrar el contenido del intent -->
+    <div id="view-modal" class="fixed inset-0 hidden bg-gray-900 bg-opacity-50 flex items-center justify-center">
         <div class="bg-white p-6 rounded-lg shadow-lg max-w-lg w-full">
-            <h2 class="text-xl font-semibold mb-4">Contenido del Intent</h2>
-            <pre id="intent-content" class="bg-gray-100 p-4 rounded-lg overflow-x-auto max-h-96"></pre>
+            <h2 class="text-xl font-semibold mb-4">Código del Intent</h2>
+            <pre id="view-intent-content" class="bg-gray-100 p-4 rounded-lg overflow-x-auto max-h-96"></pre>
             <div class="mt-4 flex justify-end">
-                <button onclick="closeModal()" class="bg-gray-600 text-white px-4 py-2 rounded-lg">
+                <button onclick="closeViewModal()" class="bg-gray-600 text-white px-4 py-2 rounded-lg">
                     Cerrar
                 </button>
             </div>
         </div>
     </div>
-<!-- Modal para editar el código si hay errores -->
-<div id="edit-modal" class="fixed inset-0 hidden bg-gray-900 bg-opacity-50 flex items-center justify-center">
-    <div class="bg-white p-6 rounded-lg shadow-lg max-w-lg w-full">
-        <h2 class="text-xl font-semibold mb-4">Editar Código</h2>
-        
-        <textarea id="edit-code" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm h-64"></textarea>
-        
-        <!-- Indicador de carga (hidden por defecto) -->
-        <div id="loading-indicator" class="hidden flex justify-center mt-3">
-            <div class="animate-spin rounded-full h-8 w-8 border-t-4 border-blue-600"></div>
-            <span class="ml-2 text-blue-600 font-semibold">Corrigiendo errores...</span>
-        </div>
 
-        <div class="mt-4 flex justify-end">
-            <button id="fix-errors-btn" onclick="fixErrors()" class="bg-yellow-500 text-white px-4 py-2 rounded-lg">
-                Corregir Errores
-            </button>
-            <button onclick="saveEditedCode()" class="bg-green-600 text-white px-4 py-2 rounded-lg ml-2">
-                Guardar
-            </button>
-            <button onclick="closeEditModal()" class="ml-2 bg-gray-600 text-white px-4 py-2 rounded-lg">
-                Cancelar
-            </button>
+    <!-- Modal para editar el código si hay errores -->
+    <div id="edit-modal" class="fixed inset-0 hidden bg-gray-900 bg-opacity-50 flex items-center justify-center">
+        <div class="bg-white p-6 rounded-lg shadow-lg max-w-lg w-full">
+            <h2 class="text-xl font-semibold mb-4">Editar Código</h2>
+            
+            <textarea id="edit-code" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm h-64"></textarea>
+            
+            <!-- Indicador de carga (hidden por defecto) -->
+            <div id="loading-indicator" class="hidden flex justify-center mt-3">
+                <div class="animate-spin rounded-full h-8 w-8 border-t-4 border-blue-600"></div>
+                <span class="ml-2 text-blue-600 font-semibold">Corrigiendo errores...</span>
+            </div>
+
+            <div class="mt-4 flex justify-end">
+                <button id="fix-errors-btn" onclick="fixErrors()" class="bg-yellow-500 text-white px-4 py-2 rounded-lg">
+                    Corregir Errores
+                </button>
+                <button onclick="saveEditedCode()" class="bg-green-600 text-white px-4 py-2 rounded-lg ml-2">
+                    Guardar
+                </button>
+                <button onclick="closeEditModal()" class="ml-2 bg-gray-600 text-white px-4 py-2 rounded-lg">
+                    Cancelar
+                </button>
+            </div>
         </div>
     </div>
-</div>
 
-<script>
-    async function validateIntent(intentName) {
-        if (!intentName.endsWith(".py")) {
-            intentName += ".py";
+    <script>
+        async function validateIntent(intentName) {
+            if (!intentName.endsWith(".py")) {
+                intentName += ".py";
+            }
+
+            const response = await fetch(`/validate_intent/?intent_name=${intentName}`);
+            const data = await response.json();
+            
+            if (data.status === "success") {
+                alert(data.message);
+            } else {
+                document.getElementById("edit-code").value = data.code;
+                document.getElementById("edit-modal").classList.remove("hidden");
+                document.getElementById("edit-modal").setAttribute("data-intent", intentName);
+            }
         }
 
-        const response = await fetch(`/validate_intent/?intent_name=${intentName}`);
-        const data = await response.json();
+        async function loadIntent(intentName) {
+            if (!intentName.endsWith(".py")) {
+                intentName += ".py";
+            }
+
+            const response = await fetch(`/read_intent/?intent_name=${intentName}`);
+            const data = await response.text();
+
+            if (response.ok) {
+                document.getElementById("view-intent-content").textContent = data;
+                document.getElementById("view-modal").classList.remove("hidden");
+            } else {
+                alert(data || "⚠️ No se pudo cargar el intent.");
+            }
+        }
+
+        function closeViewModal() {
+            document.getElementById("view-modal").classList.add("hidden");
+        }
+
+        function closeEditModal() {
+            document.getElementById("edit-modal").classList.add("hidden");
+        }
+
+        async function saveEditedCode() {
+            const intentName = document.getElementById("edit-modal").getAttribute("data-intent");
+            const editedCode = document.getElementById("edit-code").value;
+
+            const response = await fetch(`/save_edited_code/?intent_name=${intentName}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ code: editedCode })
+            });
+
+            const data = await response.json();
+            alert(data.message);
+            closeEditModal();
+        }
+
+        async function fixErrors() {
+            const code = document.getElementById("edit-code").value;
+            const fixBtn = document.getElementById("fix-errors-btn");
+            const loadingIndicator = document.getElementById("loading-indicator");
+
+            if (!code.trim()) {
+                alert("⚠️ No hay código para corregir.");
+                return;
+            }
+
+            fixBtn.disabled = true;
+            fixBtn.classList.add("opacity-50", "cursor-not-allowed");
+            loadingIndicator.classList.remove("hidden");
+
+            const response = await fetch(`/fix_errors/`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ code: code })
+            });
+
+            const data = await response.json();
+
+            fixBtn.disabled = false;
+            fixBtn.classList.remove("opacity-50", "cursor-not-allowed");
+            loadingIndicator.classList.add("hidden");
+
+            if (response.ok) {
+                document.getElementById("edit-code").value = data.fixed_code;
+                alert(data.message);
+            } else {
+                alert(data.error || "⚠️ No se pudo corregir el código.");
+            }
+        }
+
         
-        if (data.status === "success") {
-            alert(data.message);
-        } else {
-            // Mostrar el mensaje de error y el código en la ventana modal
-            document.getElementById("edit-code").value = data.code;
-            document.getElementById("edit-modal").classList.remove("hidden");
-
-            // Guardamos temporalmente el nombre del intent
-            document.getElementById("edit-modal").setAttribute("data-intent", intentName);
-        }
-    }
-
-    function closeEditModal() {
-        document.getElementById("edit-modal").classList.add("hidden");
-    }
-
-    async function saveEditedCode() {
-        const intentName = document.getElementById("edit-modal").getAttribute("data-intent");
-        const editedCode = document.getElementById("edit-code").value;
-
-        const response = await fetch(`/save_edited_code/?intent_name=${intentName}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code: editedCode })
-        });
-
-        const data = await response.json();
-        alert(data.message);
-        closeEditModal();
-    }
-
-    async function fixErrors() {
-        const code = document.getElementById("edit-code").value;
-        const fixBtn = document.getElementById("fix-errors-btn");
-        const loadingIndicator = document.getElementById("loading-indicator");
-
-        if (!code.trim()) {
-            alert("⚠️ No hay código para corregir.");
-            return;
-        }
-
-        // Mostrar indicador de carga y deshabilitar el botón
-        fixBtn.disabled = true;
-        fixBtn.classList.add("opacity-50", "cursor-not-allowed");
-        loadingIndicator.classList.remove("hidden");
-
-        const response = await fetch(`/fix_errors/`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code: code })
-        });
-
-        const data = await response.json();
-
-        // Ocultar indicador de carga y habilitar botón nuevamente
-        fixBtn.disabled = false;
-        fixBtn.classList.remove("opacity-50", "cursor-not-allowed");
-        loadingIndicator.classList.add("hidden");
-
-        if (response.ok) {
-            document.getElementById("edit-code").value = data.fixed_code; // Reemplaza el código con la versión corregida
-            alert(data.message);
-        } else {
-            alert(data.error || "⚠️ No se pudo corregir el código.");
-        }
-    }
-    
-</script>
+            async function deleteIntent(intentName) {
+                if (!confirm(`¿Seguro que quieres eliminar '${intentName}'?`)) {
+                    return;
+                }
+        
+                if (!intentName.endsWith(".py")) {
+                    intentName += ".py";
+                }
+        
+                const response = await fetch(`/delete_intent/?intent_name=${intentName}`, {
+                    method: "DELETE"
+                });
+        
+                const data = await response.json();
+        
+                if (response.ok) {
+                    alert(data.message);
+                    location.reload();  // Recargar la página para actualizar la lista
+                } else {
+                    alert(data.error || "⚠️ No se pudo eliminar el intent.");
+                }
+            }
+        
+        
+    </script>
+</body>
+</html>

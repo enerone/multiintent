@@ -69,12 +69,18 @@ def save_intent(intent_name, intent_code):
 
 
 # Función para leer el contenido de una tool
-def read_intent(intent_name):
-    filename = os.path.join(TOOLS_DIR, f"{intent_name}.py")
-    if os.path.exists(filename):
-        with open(filename, "r") as f:
-            return f.read()
-    return "⚠️ No se encontró el archivo."
+@app.get("/read_intent/", response_class=PlainTextResponse)
+async def read_intent_endpoint(intent_name: str = Query(...)):
+    if not intent_name.endswith(".py"):
+        intent_name += ".py"
+
+    filename = os.path.join(TOOLS_DIR, intent_name)
+
+    if not os.path.exists(filename):
+        return PlainTextResponse(f"⚠️ No se encontró el archivo '{filename}'", status_code=404)
+
+    with open(filename, "r") as f:
+        return PlainTextResponse(f.read())
 
 
 # Endpoint para eliminar una tool
