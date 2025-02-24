@@ -7,19 +7,19 @@ import re
 import ast
 import traceback
 
-app = FastAPI(title="Gestor de Intents con Ollama")
+app = FastAPI(title="Intent Manager with Ollama")
 
 TOOLS_DIR = "tools"
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 
 templates = Jinja2Templates(directory="templates")
 
-# Función para llamar a Ollama y generar código en base a una descripción
+# Function to call Ollama and generate code based on a description
 async def call_ollama(description: str):
     try:
         prompt = (
-            f"Genera solo el código en Python para lo siguiente, sin explicaciones: {description}. "
-            "Solo responde con código, sin texto adicional. Devuelve el código dentro de triple backticks ```python."
+            f"Generate only the Python code for the following, without explanations: {description}. "
+            "Only respond with code, no additional text. Return the code within triple backticks ```python."
         )
 
         result = subprocess.run(
@@ -33,42 +33,42 @@ async def call_ollama(description: str):
         if result.returncode == 0:
             code_block, parameters = extract_code(output)
             if code_block:
-                return f"# Prompt utilizado: {description}\n\n{code_block}", parameters
-            return "⚠️ No se generó código válido.", []
+                return f"# Prompt used: {description}\n\n{code_block}", parameters
+            return "⚠️ No valid code was generated.", []
 
         else:
-            return f"⚠️ Error ejecutando Ollama: {result.stderr.strip()}", []
+            return f"⚠️ Error executing Ollama: {result.stderr.strip()}", []
 
     except Exception as e:
-        return f"⚠️ Excepción al ejecutar Ollama: {str(e)}", []
+        return f"⚠️ Exception while executing Ollama: {str(e)}", []
 
 
-# Función para extraer solo el código y detectar parámetros
+# Function to extract only the code and detect parameters
 def extract_code(text):
     match = re.search(r"```python\n(.*?)\n```", text, re.DOTALL)
     code = match.group(1).strip() if match else text.strip()
 
-    # Buscar todas las funciones y sus parámetros
+    # Find all functions and their parameters
     param_matches = re.findall(r"def\s+\w+\((.*?)\):", code)
 
-    parameters = set()  # Usamos un set para evitar duplicados
+    parameters = set()  # Use a set to avoid duplicates
     for param_match in param_matches:
-        params = [param.strip().split("=")[0] for param in param_match.split(",") if param]  # Limpiamos parámetros
+        params = [param.strip().split("=")[0] for param in param_match.split(",") if param]  # Clean up parameters
         parameters.update(params)
 
     return code, list(parameters)
 
 
-# Función para guardar intents generados
+# Function to save generated intents
 def save_intent(intent_name, intent_code):
     filename = os.path.join(TOOLS_DIR, f"{intent_name}.py")
     os.makedirs(TOOLS_DIR, exist_ok=True)
     with open(filename, "w") as f:
         f.write(intent_code)
-    return f"✅ Intent '{intent_name}' guardado correctamente."
+    return f"✅ Intent '{intent_name}' successfully saved."
 
 
-# Función para leer el contenido de una tool
+# Function to read the content of a tool
 @app.get("/read_intent/", response_class=PlainTextResponse)
 async def read_intent_endpoint(intent_name: str = Query(...)):
     if not intent_name.endswith(".py"):
@@ -77,32 +77,32 @@ async def read_intent_endpoint(intent_name: str = Query(...)):
     filename = os.path.join(TOOLS_DIR, intent_name)
 
     if not os.path.exists(filename):
-        return PlainTextResponse(f"⚠️ No se encontró el archivo '{filename}'", status_code=404)
+        return PlainTextResponse(f"⚠️ File '{filename}' not found.", status_code=404)
 
     with open(filename, "r") as f:
         return PlainTextResponse(f.read())
 
 
-# Endpoint para eliminar una tool
+# Endpoint to delete a tool
 @app.delete("/delete_intent/")
 async def delete_intent(intent_name: str = Query(...)):
-    # Asegurar que el nombre tiene la extensión .py
+    # Ensure the name has the .py extension
     if not intent_name.endswith(".py"):
         intent_name += ".py"
 
     filename = os.path.join(TOOLS_DIR, intent_name)
 
     if not os.path.exists(filename):
-        return JSONResponse(content={"error": f"⚠️ Archivo no encontrado: {filename}"}, status_code=404)
+        return JSONResponse(content={"error": f"⚠️ File not found: {filename}"}, status_code=404)
 
     try:
         os.remove(filename)
-        return JSONResponse(content={"message": f"✅ Intent '{intent_name}' eliminado correctamente."}, status_code=200)
+        return JSONResponse(content={"message": f"✅ Intent '{intent_name}' successfully deleted."}, status_code=200)
     except Exception as e:
-        return JSONResponse(content={"error": f"⚠️ No se pudo eliminar el archivo: {str(e)}"}, status_code=500)
+        return JSONResponse(content={"error": f"⚠️ Could not delete file: {str(e)}"}, status_code=500)
 
 
-# Función para renderizar la plantilla HTML
+# Function to render the HTML template
 def render_template(request: Request, message="", content="", parameters=None, intent_name=""):
     if parameters is None:
         parameters = []
@@ -121,36 +121,36 @@ def render_template(request: Request, message="", content="", parameters=None, i
     )
 
 
-# Página principal con el formulario
+# Main page with the form
 @app.get("/")
 async def form_page(request: Request):
     return render_template(request)
 
 
-# Generar un nuevo intent con Ollama
+# Generate a new intent with Ollama
 @app.post("/generate/")
 async def generate_intent(request: Request, intent_name: str = Form(...), description: str = Form(...)):
     intent_code, parameters = await call_ollama(description)
 
-    # Guardamos el intent sin parámetros aún
+    # Save the intent without parameters yet
     save_intent(intent_name, intent_code)
 
-    # Renderizar con los parámetros detectados
+    # Render with detected parameters
     return render_template(
         request,
-        message=f"Intent '{intent_name}' generado.",
+        message=f"Intent '{intent_name}' generated.",
         content=intent_code,
         parameters=parameters,
         intent_name=intent_name
     )
 
 
-# Endpoint para obtener el contenido de una tool específica
+# Endpoint to obtain the content of a specific tool
 @app.get("/read_intent/", response_class=PlainTextResponse)
 async def read_intent_endpoint(intent_name: str = Query(...)):
     filename = os.path.join(TOOLS_DIR, intent_name)
 
-    # Asegurar que el nombre tiene la extensión .py
+    # Ensure the name has the .py extension
     if not intent_name.endswith(".py"):
         filename += ".py"
 
@@ -158,7 +158,7 @@ async def read_intent_endpoint(intent_name: str = Query(...)):
         with open(filename, "r") as f:
             return f.read()
     
-    return PlainTextResponse(f"⚠️ Error: No se encontró el archivo '{filename}'", status_code=404)
+    return PlainTextResponse(f"⚠️ Error: File '{filename}' not found.", status_code=404)
 
 @app.post("/save_edited_code/")
 async def save_edited_code(intent_name: str = Query(...), body: dict = Body(...)):
@@ -168,34 +168,34 @@ async def save_edited_code(intent_name: str = Query(...), body: dict = Body(...)
     filename = os.path.join(TOOLS_DIR, intent_name)
 
     if not os.path.exists(filename):
-        return JSONResponse(content={"error": f"⚠️ No se encontró el archivo '{filename}'"}, status_code=404)
+        return JSONResponse(content={"error": f"⚠️ File '{filename}' not found."}, status_code=404)
 
     try:
         with open(filename, "w") as f:
             f.write(body["code"])
 
-        return JSONResponse(content={"message": "✅ Código actualizado correctamente."}, status_code=200)
+        return JSONResponse(content={"message": "✅ Code successfully updated."}, status_code=200)
     
     except Exception as e:
-        return JSONResponse(content={"error": f"⚠️ No se pudo guardar el código: {str(e)}"}, status_code=500)
+        return JSONResponse(content={"error": f"⚠️ Could not save the code: {str(e)}"}, status_code=500)
 
 
-# Guardar parámetros ingresados por el usuario en la tool
+# Save parameters entered by the user in the tool
 @app.post("/save_params/")
 async def save_params(intent_name: str = Query(...), params: dict = Body(...)):
     filename = os.path.join(TOOLS_DIR, f"{intent_name}.py")
 
     if os.path.exists(filename):
         with open(filename, "a") as f:
-            f.write("\n\n# Parámetros ingresados por el usuario:\n")
+            f.write("\n\n# User-entered parameters:\n")
             for key, value in params.items():
                 f.write(f"{key} = '{value}'\n")
-        return JSONResponse(content={"message": "Parámetros guardados."}, status_code=200)
+        return JSONResponse(content={"message": "Parameters saved."}, status_code=200)
     
-    return JSONResponse(content={"error": "Archivo no encontrado."}, status_code=404)
+    return JSONResponse(content={"error": "File not found."}, status_code=404)
 
 
-# Validar la corrección del código de la tool
+# Validate the correctness of the tool's code
 @app.get("/validate_intent/")
 async def validate_intent(intent_name: str = Query(...)):
     if not intent_name.endswith(".py"):
@@ -204,29 +204,29 @@ async def validate_intent(intent_name: str = Query(...)):
     filename = os.path.join(TOOLS_DIR, intent_name)
 
     if not os.path.exists(filename):
-        return JSONResponse(content={"status": "error", "message": f"⚠️ No se encontró el archivo '{filename}'"}, status_code=404)
+        return JSONResponse(content={"status": "error", "message": f"⚠️ File '{filename}' not found."}, status_code=404)
 
     try:
         with open(filename, "r") as f:
             code = f.read()
 
-        ast.parse(code)  # Verifica la sintaxis
+        ast.parse(code)  # Checks syntax
         exec_globals = {}
-        exec(code, exec_globals)  # Ejecuta el código de manera segura
+        exec(code, exec_globals)  # Executes the code safely
 
-        return JSONResponse(content={"status": "success", "message": "✅ El código de la tool es válido y se ejecutó correctamente."})
+        return JSONResponse(content={"status": "success", "message": "✅ The tool's code is valid and executed correctly."})
 
     except SyntaxError as e:
         return JSONResponse(content={
             "status": "error",
-            "message": f"⚠️ Error de sintaxis en la línea {e.lineno}: {e.msg}",
-            "code": code  # Enviar el código para que se pueda editar en el modal
+            "message": f"⚠️ Syntax error on line {e.lineno}: {e.msg}",
+            "code": code  # Send code so it can be edited in the modal
         })
 
     except Exception as e:
         return JSONResponse(content={
             "status": "error",
-            "message": f"⚠️ Error al ejecutar el código: {traceback.format_exc()}",
+            "message": f"⚠️ Error executing the code: {traceback.format_exc()}",
             "code": code
         })
         
@@ -235,12 +235,12 @@ async def fix_errors(body: dict = Body(...)):
     original_code = body.get("code", "")
 
     if not original_code:
-        return JSONResponse(content={"error": "⚠️ No se recibió código para corregir."}, status_code=400)
+        return JSONResponse(content={"error": "⚠️ No code received for correction."}, status_code=400)
 
     try:
         prompt = (
-            f"Corrige los errores en el siguiente código Python y devuelve solo el código corregido, sin explicaciones. "
-            f"El código a corregir es:\n```python\n{original_code}\n```"
+            f"Fix the errors in the following Python code and return only the corrected code, without explanations. "
+            f"The code to fix is:\n```python\n{original_code}\n```"
         )
 
         result = subprocess.run(
@@ -251,8 +251,7 @@ async def fix_errors(body: dict = Body(...)):
 
         fixed_code = extract_code(result.stdout)
 
-        return JSONResponse(content={"fixed_code": fixed_code, "message": "✅ Código corregido automáticamente."}, status_code=200)
+        return JSONResponse(content={"fixed_code": fixed_code, "message": "✅ Code automatically corrected."}, status_code=200)
 
     except Exception as e:
-        return JSONResponse(content={"error": f"⚠️ Error al corregir el código: {str(e)}"}, status_code=500)
-
+        return JSONResponse(content={"error": f"⚠️ Error fixing the code: {str(e)}"}, status_code=500)

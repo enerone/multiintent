@@ -1,11 +1,11 @@
 import os
 
-# Carpeta donde se guardarán los intents
+# Directory where the intents will be stored
 TOOLS_DIR = "tools"
 
-# Plantillas base para cada tipo de intento
+# Base templates for each type of intent
 TEMPLATES = {
-    "rag_opensearch": """# RAG con OpenSearch
+    "rag_opensearch": """# RAG with OpenSearch
 import httpx
 
 async def process(query: str):
@@ -25,30 +25,29 @@ def process(query: str):
     conn.close()
     return results
 """,
-    "generic_empty": """# Intento genérico vacío
+    "generic_empty": """# Generic empty intent
 def process(input_data):
-    return {"message": "Intento genérico ejecutado", "input": input_data}
+    return {"message": "Generic intent executed", "input": input_data}
 """
 }
 
 def create_intent(intent_type: str, intent_name: str):
-    """Genera un archivo de intento en la carpeta tools/"""
+    """Generates an intent file inside the tools/ folder"""
     if intent_type not in TEMPLATES:
-        print(f"⚠️ Tipo de intento '{intent_type}' no reconocido.")
+        print(f"⚠️ Intent type '{intent_type}' not recognized.")
         return
     
-    # Crear carpeta si no existe
+    # Create folder if it doesn't exist
     os.makedirs(TOOLS_DIR, exist_ok=True)
     
-    # Crear archivo dentro de tools/
+    # Create file inside tools/
     filename = f"{TOOLS_DIR}/{intent_name}.py"
     
     if os.path.exists(filename):
-        print(f"⚠️ El intento '{intent_name}' ya existe.")
+        print(f"⚠️ The intent '{intent_name}' already exists.")
         return
     
     with open(filename, "w") as f:
         f.write(TEMPLATES[intent_type])
     
-    print(f"✅ Intento '{intent_name}' generado en {filename}")
-
+    print(f"✅ Intent '{intent_name}' generated at {filename}")
