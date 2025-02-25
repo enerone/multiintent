@@ -204,15 +204,23 @@ async def validate_intent(intent_name: str = Query(...)):
     filename = os.path.join(TOOLS_DIR, intent_name)
 
     if not os.path.exists(filename):
-        return JSONResponse(content={"status": "error", "message": f"⚠️ File '{filename}' not found."}, status_code=404)
+        return JSONResponse(content={"status": "error", "message": f"⚠️ File not found: '{filename}'"}, status_code=404)
 
     try:
         with open(filename, "r") as f:
             code = f.read()
 
-        ast.parse(code)  # Checks syntax
+        ast.parse(code)  # Check syntax
         exec_globals = {}
-        exec(code, exec_globals)  # Executes the code safely
+
+        try:
+            exec(code, exec_globals)  # Execute code safely
+        except ImportError as e:
+            return JSONResponse(content={
+                "status": "error",
+                "message": f"⚠️ ImportError: {str(e)}. Run 'python -m spacy download en_core_web_sm'.",
+                "code": code
+            })
 
         return JSONResponse(content={"status": "success", "message": "✅ The tool's code is valid and executed correctly."})
 
@@ -220,7 +228,7 @@ async def validate_intent(intent_name: str = Query(...)):
         return JSONResponse(content={
             "status": "error",
             "message": f"⚠️ Syntax error on line {e.lineno}: {e.msg}",
-            "code": code  # Send code so it can be edited in the modal
+            "code": code
         })
 
     except Exception as e:
@@ -229,6 +237,7 @@ async def validate_intent(intent_name: str = Query(...)):
             "message": f"⚠️ Error executing the code: {traceback.format_exc()}",
             "code": code
         })
+
         
 @app.post("/fix_errors/")
 async def fix_errors(body: dict = Body(...)):

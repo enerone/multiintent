@@ -1,34 +1,38 @@
-# Prompt utilizado: I want a tool to get into an opensearch database and search for clima
-
-import os
-import orjson
 import pandas as pd
+from opensearchpy import OpenSearch
 
-# Replace 'your_opensearch_database_url' with your actual database URL
-db = osd.connect('http://localhost:8080', verify=False)
+# Correct OpenSearch client initialization (example)
+osd = OpenSearch(
+    host="localhost",
+    port=9200,
+    http_auth=('admin', 'password'),
+    use_ssl=True,
+    verify_certs=True,
+    ResponsiveScrolling=True
+)
 
-try:
-    # Search for metadata containing 'climate'
-    climate_metadata = db.searchmetadata(searchq={'match': {'climate': {}}})
+url = osd.get_url()
+db = OpenSearchClient(url, verify_certs=False).create_index()
+
+# Fix the search query to correctly find metadata entries with climate data
+query = {
+    "match": {
+        "_source": ["climate"]
+    }
+}
+
+metadata_result = db.search(
+    body=query,
+    per_page=1000
+)
+
+entries = []
+for entry in metadata_result.entries():
+    entry_data = entry.get('_content_')
+    climate_json = entry_data.get('json', {}).get('data', {})
+    if 'attributes' in climate_json:
+        # Assuming data is nested under the 'attributes' key within 'json'
+        entries.append(climate_json)
     
-    # Fetch detailed information for each matching entry
-    results = []
-    for entry in climate_metadata['entries']:
-        try:
-            # Get the full entry details
-            entry_data = db.getentry(entry['_id'])
-            
-            # Extract relevant fields
-            results.append({
-                'ID': entry['_id'],
-                'ClimateData': orjson.loads(entry_data['_content_']['json'])['data']
-            })
-            
-        except Exception as e:
-            print(f"Error fetching entry {entry['_id']}: {e}")
-    
-    # Convert results to DataFrame for better visualization
-    df = pd.DataFrame(results)
-    print(df)
-except Exception as e:
-    print(f"Connection error: {e}")
+if entries:
+    df = pd.DataFrame(entries),
